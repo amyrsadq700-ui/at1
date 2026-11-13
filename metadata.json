@@ -1,0 +1,6 @@
+{
+  "name": "آزمایشگاه تعاملی فیزیک و سیالات",
+  "description": "شبیه‌ساز تعاملی دو‌بعدی مکانیک اجسام صلب، دینامیک سیالات و اصل ارشمیدس با الهام از شبیه‌سازی‌های PhET",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
