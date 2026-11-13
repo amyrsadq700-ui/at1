@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Camera, Sparkles, Sun } from 'lucide-react';
 import { renderPhysicsScene } from './canvas/renderer';
-import { CanvasToolbar } from './components/CanvasToolbar';
+import { CanvasToolbar, type ViewportMode } from './components/CanvasToolbar';
 import { ControlDeck } from './components/ControlDeck';
 import { FormulasModal } from './components/FormulasModal';
 import { PlaybackBar } from './components/PlaybackBar';
@@ -22,6 +23,12 @@ import {
   type SimulationStats,
   type Vec2,
 } from './physics/types';
+import {
+  PhysicsViewport3D,
+  type CameraPreset3D,
+  type LightingPreset3D,
+  type RenderQuality3D,
+} from './three/PhysicsViewport3D';
 
 type PointerDragKind =
   | 'none'
@@ -48,6 +55,12 @@ export default function App() {
   const pointerPosRef = useRef<Vec2>({ x: 0, y: 0 });
 
   const [isRunning, setIsRunning] = useState(true);
+  const [viewMode, setViewMode] = useState<ViewportMode>('2d');
+  const viewModeRef = useRef<ViewportMode>('2d');
+  const [cameraPreset3D, setCameraPreset3D] = useState<CameraPreset3D>('isometric');
+  const [cameraTrigger3D, setCameraTrigger3D] = useState(0);
+  const [lightingPreset3D, setLightingPreset3D] = useState<LightingPreset3D>('lab-day');
+  const [renderQuality3D, setRenderQuality3D] = useState<RenderQuality3D>('ultra');
   const [activeTool, setActiveTool] = useState<InteractionTool>('select');
   const [spawnMaterial, setSpawnMaterial] = useState<MaterialId>('wood');
   const [config, setConfig] = useState<SimulationConfig>(() => ({
@@ -71,6 +84,10 @@ export default function App() {
   useEffect(() => {
     isRunningRef.current = isRunning;
   }, [isRunning]);
+
+  useEffect(() => {
+    viewModeRef.current = viewMode;
+  }, [viewMode]);
 
   useEffect(() => {
     activeToolRef.current = activeTool;
@@ -108,9 +125,8 @@ export default function App() {
 
     const frame = (now: number) => {
       const world = worldRef.current;
-      const canvas = canvasRef.current;
-      if (world && canvas) {
-        if (dragKindRef.current === 'pour') {
+      if (world) {
+        if (viewModeRef.current === '2d' && dragKindRef.current === 'pour') {
           world.pourWaterAt(pointerPosRef.current.x, pointerPosRef.current.y);
         }
 
@@ -123,24 +139,27 @@ export default function App() {
         }
         lastStopwatchTick = now;
 
-        const dpr = Math.min(window.devicePixelRatio || 1, 2);
-        const targetW = WORLD_WIDTH * dpr;
-        const targetH = WORLD_HEIGHT * dpr;
-        if (canvas.width !== targetW || canvas.height !== targetH) {
-          canvas.width = targetW;
-          canvas.height = targetH;
-        }
+        const canvas = canvasRef.current;
+        if (viewModeRef.current === '2d' && canvas) {
+          const dpr = Math.min(window.devicePixelRatio || 1, 2);
+          const targetW = WORLD_WIDTH * dpr;
+          const targetH = WORLD_HEIGHT * dpr;
+          if (canvas.width !== targetW || canvas.height !== targetH) {
+            canvas.width = targetW;
+            canvas.height = targetH;
+          }
 
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.save();
-          ctx.scale(dpr, dpr);
-          renderPhysicsScene(ctx, world, {
-            pendingPolygonPoints: pendingPolygonRef.current,
-            hoverPoint: hoverPointRef.current,
-            activeTool: activeToolRef.current,
-          });
-          ctx.restore();
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.save();
+            ctx.scale(dpr, dpr);
+            renderPhysicsScene(ctx, world, {
+              pendingPolygonPoints: pendingPolygonRef.current,
+              hoverPoint: hoverPointRef.current,
+              activeTool: activeToolRef.current,
+            });
+            ctx.restore();
+          }
         }
 
         if (now - lastUiSyncTime >= 85) {
@@ -479,13 +498,15 @@ export default function App() {
           className="flex min-w-0 flex-1 flex-col bg-slate-50"
         >
           <CanvasToolbar
+            viewMode={viewMode}
+            onChangeViewMode={setViewMode}
             activeTool={activeTool}
             onSelectTool={setActiveTool}
             config={config}
             onToggleConfig={handleToggleConfig}
           />
 
-          {/* Stage Info & Fluid Summary Bar (never overlaps tank) */}
+          {/* Stage Info & 3D Rendering Controls Bar (never overlaps tank) */}
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/80 bg-white px-4 py-2">
             <div className="flex items-center gap-2 text-xs">
               <span className="font-bold text-slate-900">
@@ -497,28 +518,114 @@ export default function App() {
               </span>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3 text-xs text-slate-700">
-              {config.baseWaterFraction > 0.001 && (
-                <>
+            {viewMode === '3d' ? (
+              <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                {/* Camera Angle Presets */}
+                <div
+                  role="group"
+                  aria-label="زاویه دوربین سه‌بعدی"
+                  className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 p-0.5"
+                >
+                  <Camera className="mx-1 h-3.5 w-3.5 text-slate-500" aria-hidden="true" />
+                  {(
+                    [
+                      ['isometric', 'سه‌بعدی'],
+                      ['front', 'روبرو'],
+                      ['top', 'بالا'],
+                    ] as const
+                  ).map(([id, label]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => {
+                        setCameraPreset3D(id);
+                        setCameraTrigger3D((c) => c + 1);
+                      }}
+                      aria-pressed={cameraPreset3D === id}
+                      className={`rounded px-2 py-0.5 font-medium transition-colors whitespace-nowrap ${
+                        cameraPreset3D === id
+                          ? 'bg-white text-sky-800 shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Studio Lighting Presets */}
+                <div
+                  role="group"
+                  aria-label="نورپردازی استودیو"
+                  className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 p-0.5"
+                >
+                  <Sun className="mx-1 h-3.5 w-3.5 text-amber-600" aria-hidden="true" />
+                  {(
+                    [
+                      ['lab-day', 'نور روز'],
+                      ['warm-studio', 'استودیو گرم'],
+                      ['dramatic', 'نور متمرکز'],
+                    ] as const
+                  ).map(([id, label]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setLightingPreset3D(id)}
+                      aria-pressed={lightingPreset3D === id}
+                      className={`rounded px-2 py-0.5 font-medium transition-colors whitespace-nowrap ${
+                        lightingPreset3D === id
+                          ? 'bg-white text-slate-900 shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Render Quality Toggle */}
+                <button
+                  type="button"
+                  onClick={() =>
+                    setRenderQuality3D((q) => (q === 'ultra' ? 'balanced' : 'ultra'))
+                  }
+                  aria-pressed={renderQuality3D === 'ultra'}
+                  className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 font-medium transition-colors whitespace-nowrap ${
+                    renderQuality3D === 'ultra'
+                      ? 'border-sky-300 bg-sky-50 text-sky-800'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
                   <span>
-                    حجم سیال:{' '}
-                    <strong dir="ltr" className="inline-block font-mono-num text-slate-900">
-                      {stats.waterVolumeLiters.toFixed(0)} L
-                    </strong>
+                    {renderQuality3D === 'ultra' ? 'رندر PBR حداکثر' : 'رندر متعادل'}
                   </span>
-                  <span className="text-slate-300" aria-hidden="true">·</span>
-                  <span>
-                    چگالی سیال:{' '}
-                    <strong dir="ltr" className="inline-block font-mono-num text-sky-700">
-                      {Math.round(config.fluidDensity)} kg/m³
-                    </strong>
-                  </span>
-                </>
-              )}
-            </div>
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center gap-3 text-xs text-slate-700">
+                {config.baseWaterFraction > 0.001 && (
+                  <>
+                    <span>
+                      حجم سیال:{' '}
+                      <strong dir="ltr" className="inline-block font-mono-num text-slate-900">
+                        {stats.waterVolumeLiters.toFixed(0)} L
+                      </strong>
+                    </span>
+                    <span className="text-slate-300" aria-hidden="true">·</span>
+                    <span>
+                      چگالی سیال:{' '}
+                      <strong dir="ltr" className="inline-block font-mono-num text-sky-700">
+                        {Math.round(config.fluidDensity)} kg/m³
+                      </strong>
+                    </span>
+                  </>
+                )}
+              </div>
+            )}
           </div>
 
-          {/* Canvas Stage Viewport */}
+          {/* Canvas / 3D Stage Viewport */}
           <div className="relative flex flex-1 items-center justify-center overflow-hidden p-3 sm:p-4">
             {config.showStopwatch && (
               <div className="absolute top-5 left-5 z-10">
@@ -537,7 +644,7 @@ export default function App() {
             )}
 
             {/* Polygon Drawing Helper Prompt */}
-            {activeTool === 'spawn-polygon' && (
+            {activeTool === 'spawn-polygon' && viewMode === '2d' && (
               <div className="absolute bottom-6 left-1/2 z-20 flex -translate-x-1/2 items-center gap-3 rounded-lg border border-sky-300 bg-white/95 px-4 py-2 text-xs shadow-sm">
                 <span className="font-medium text-slate-800">
                   برای رسم چندضلعی روی صحنه کلیک کنید ({pendingVertexCount} نقطه)
@@ -565,26 +672,43 @@ export default function App() {
               </div>
             )}
 
-            {/* Interactive 2D Physics Canvas */}
-            <canvas
-              ref={canvasRef}
-              data-testid="physics-canvas"
-              onPointerDown={handleCanvasPointerDown}
-              onPointerMove={handleCanvasPointerMove}
-              onPointerUp={handleCanvasPointerUp}
-              onPointerCancel={handleCanvasPointerUp}
-              onDoubleClick={() => {
-                if (
-                  activeToolRef.current === 'spawn-polygon' &&
-                  pendingPolygonRef.current.length >= 3
-                ) {
-                  completePendingPolygon();
-                }
-              }}
-              className={`aspect-[960/600] max-h-full w-auto max-w-full rounded-lg border border-slate-300 bg-white shadow-xs touch-none ${
-                activeTool === 'select' ? 'cursor-grab active:cursor-grabbing' : 'cursor-crosshair'
-              }`}
-            />
+            {viewMode === '3d' ? (
+              <div className="h-full w-full min-h-[380px]">
+                <PhysicsViewport3D
+                  worldRef={worldRef}
+                  isRunning={isRunning}
+                  activeTool={activeTool}
+                  spawnMaterial={spawnMaterial}
+                  cameraPreset={cameraPreset3D}
+                  cameraTrigger={cameraTrigger3D}
+                  lightingPreset={lightingPreset3D}
+                  renderQuality={renderQuality3D}
+                  onSelectTool={setActiveTool}
+                  onSyncUi={syncUiFromWorld}
+                />
+              </div>
+            ) : (
+              /* Interactive 2D Physics Canvas */
+              <canvas
+                ref={canvasRef}
+                data-testid="physics-canvas"
+                onPointerDown={handleCanvasPointerDown}
+                onPointerMove={handleCanvasPointerMove}
+                onPointerUp={handleCanvasPointerUp}
+                onPointerCancel={handleCanvasPointerUp}
+                onDoubleClick={() => {
+                  if (
+                    activeToolRef.current === 'spawn-polygon' &&
+                    pendingPolygonRef.current.length >= 3
+                  ) {
+                    completePendingPolygon();
+                  }
+                }}
+                className={`aspect-[960/600] max-h-full w-auto max-w-full rounded-lg border border-slate-300 bg-white shadow-xs touch-none ${
+                  activeTool === 'select' ? 'cursor-grab active:cursor-grabbing' : 'cursor-crosshair'
+                }`}
+              />
+            )}
           </div>
 
           <PlaybackBar

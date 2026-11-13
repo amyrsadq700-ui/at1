@@ -1,9 +1,11 @@
 import {
   ArrowUpRight,
+  Box,
   Circle,
   Droplets,
   Grid3x3,
   Hexagon,
+  Layers,
   MousePointer2,
   MoveUp,
   Ruler,
@@ -14,7 +16,11 @@ import {
 } from 'lucide-react';
 import type { InteractionTool, SimulationConfig } from '../physics/types';
 
+export type ViewportMode = '2d' | '3d';
+
 interface CanvasToolbarProps {
+  viewMode: ViewportMode;
+  onChangeViewMode: (mode: ViewportMode) => void;
   activeTool: InteractionTool;
   onSelectTool: (tool: InteractionTool) => void;
   config: SimulationConfig;
@@ -43,6 +49,8 @@ const TOOLS: {
 ];
 
 export function CanvasToolbar({
+  viewMode,
+  onChangeViewMode,
   activeTool,
   onSelectTool,
   config,
@@ -50,12 +58,47 @@ export function CanvasToolbar({
 }: CanvasToolbarProps) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50/90 px-3 py-2">
-      {/* Creation & Interaction Tools */}
-      <div
-        role="toolbar"
-        aria-label="ابزارهای تعامل و ساخت جسم"
-        className="flex flex-wrap items-center gap-1 rounded-lg border border-slate-200 bg-white p-1"
-      >
+      <div className="flex flex-wrap items-center gap-2">
+        {/* 2D / 3D Rendering Mode Switch */}
+        <div
+          role="group"
+          aria-label="حالت نمایش آزمایشگاه"
+          className="inline-flex items-center rounded-lg border border-slate-300 bg-slate-100 p-0.5"
+        >
+          <button
+            type="button"
+            onClick={() => onChangeViewMode('2d')}
+            aria-pressed={viewMode === '2d'}
+            className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-sky-600 ${
+              viewMode === '2d'
+                ? 'bg-white text-slate-900 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Layers className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>دوبعدی (2D)</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onChangeViewMode('3d')}
+            aria-pressed={viewMode === '3d'}
+            className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-sky-600 ${
+              viewMode === '3d'
+                ? 'bg-sky-700 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Box className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>سه‌بعدی واقعی (3D)</span>
+          </button>
+        </div>
+
+        {/* Creation & Interaction Tools */}
+        <div
+          role="toolbar"
+          aria-label="ابزارهای تعامل و ساخت جسم"
+          className="flex flex-wrap items-center gap-1 rounded-lg border border-slate-200 bg-white p-1"
+        >
         {TOOLS.map(({ id, label, Icon }) => {
           const active = activeTool === id;
           return (
@@ -75,6 +118,7 @@ export function CanvasToolbar({
             </button>
           );
         })}
+        </div>
       </div>
 
       {/* Vector Overlays & Measurement Instruments */}
